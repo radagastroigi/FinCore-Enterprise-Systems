@@ -16,11 +16,16 @@
 ## 🚀 Shipped Modules & Spaced-Repetition Revision Notes
 
 ### ✅ Release `v1.01` — Idempotent Payment Fraud & Risk Scoring Engine (`v1_01_idempotency_engine`)
-* **Core Concept & DSA Pattern:** `O(1)` `HashSet` lookup at the API ingestion boundary to block duplicate payment replay attacks (double-charges) in `<1ms` before invoking downstream databases or AI agents.
-* **OOP & Design Principle:** **Single Responsibility & Schema Enforcement** — Using `Pydantic BaseModel` (`PaymentFraudAssessment`) with strict `Literal` types so downstream services never receive malformed JSON.
-* **Interview Takeaway:** *Never call an LLM on every raw transaction; filter 95% of traffic with sub-millisecond deterministic rules and route only borderline high-risk anomalies (`score 45–79`) to LangGraph/MCP agents.*
+- **Core Concept & DSA Pattern:** `O(1)` `HashSet` lookup at the API ingestion boundary to block duplicate payment replay attacks (double-charges) in `<1ms` before invoking downstream databases or AI agents.
+- **OOP & Design Principle:** **Single Responsibility & Schema Enforcement** — Using `Pydantic BaseModel` (`PaymentFraudAssessment`) with strict `Literal` types so downstream services never receive malformed JSON.
+- **Interview Takeaway:** *Never call an LLM on every raw transaction; filter 95% of traffic with sub-millisecond deterministic rules and route only borderline high-risk anomalies (`score 45–79`) to LangGraph/MCP agents.*
 
 ### ✅ Release `v1.02` — Live Sliding-Window Payment Velocity Limiter (`v1_02_velocity_limiter`)
-* **Core Concept & DSA Pattern:** **Sliding Window + Double-Ended Queue (`collections.deque`)** — Evicts transactions older than `WINDOW_SECONDS` from the left (`popleft()`) in `O(1)` amortized time while tracking real-time rolling volume and frequency.
-* **System Design Equivalent:** In distributed production across multiple pods, this in-memory `deque` maps directly to a **Redis Sorted Set (`ZADD` / `ZREMRANGEBYSCORE`)** keyed by `account_id`.
-* **Interview Takeaway:** *Fixed-window counters suffer from boundary spikes (2x traffic at the minute edge); a rolling sliding window guarantees strict velocity enforcement against automated card-testing bots.*
+- **Core Concept & DSA Pattern:** **Sliding Window + Double-Ended Queue (`collections.deque`)** — Evicts transactions older than `WINDOW_SECONDS` from the left (`popleft()`) in `O(1)` amortized time while tracking real-time rolling volume and frequency.
+- **System Design Equivalent:** In distributed production across multiple pods, this in-memory `deque` maps directly to a **Redis Sorted Set (`ZADD` / `ZREMRANGEBYSCORE`)** keyed by `account_id`.
+- **Interview Takeaway:** *Fixed-window counters suffer from boundary spikes (2x traffic at the minute edge); a rolling sliding window guarantees strict velocity enforcement against automated card-testing bots.*
+
+### ✅ Release `v1.03` — ACID Double-Entry Ledger & Optimistic Concurrency (`v1_03_double_entry_ledger`)
+- **Core Concept & System Design Pattern:** **Double-Entry Bookkeeping & OCC** — Every money movement creates two immutable ledger records (Debit negative, Credit positive) where $\sum \text{Debit} + \sum \text{Credit} = 0.0$. Materialized balances are never directly updated without an atomic optimistic version check.
+- **Enterprise .NET / SQL Equivalent:** Maps directly to SQL Server `ROWVERSION` / EF Core `[Timestamp]` handling concurrency conflicts without blocking pessimistic locks.
+- **Interview Takeaway:** *Never use `UPDATE accounts SET balance = balance - X` without a version check. Financial integrity requires an append-only immutable ledger as the durable source of truth.*
