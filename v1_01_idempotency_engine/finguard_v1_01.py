@@ -15,8 +15,11 @@ class PaymentFraudAssessment(BaseModel):
 
 def evaluate_transaction(tx_id: str, amount: float, location_mismatch: bool) -> PaymentFraudAssessment:
     # 1. O(1) HashSet lookup for duplicate payment replay attacks
+    print(f"Evaluating transaction: {tx_id}")
     is_replayed = tx_id in processed_idempotency_keys
+    print(f"Is replayed: {is_replayed}")
     processed_idempotency_keys.add(tx_id)
+    print(f"Processed idempotency keys: {processed_idempotency_keys}")
     
     signals, score = [], 10
     if is_replayed:
