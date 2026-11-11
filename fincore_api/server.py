@@ -3,6 +3,11 @@ from pydantic import BaseModel, Field
 import sqlite3
 import time
 import uuid
+from collections import deque
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+
 
 app = FastAPI(
     title="FinCore-AI Enterprise Payment & Ledger API",
@@ -10,6 +15,28 @@ app = FastAPI(
     description="Real ACID SQLite/PostgreSQL Payment Gateway with O(1) Idempotency, Double-Entry Ledger & Transactional Outbox"
 )
 
+#In-memory sliding window deque for rate limiting
+RATE_LIMIT_WINDOW_SECONDS = 60 #1 minute window
+MAX_REQUESTS_PER_WINDOW = 5 #100 requests per minute
+ip_request_windows: dict[str, deque] = {}
+
+@app.middleware("http")
+async def sliding_window_rate_limit_middleware(request: Request, call_next):
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    now = time.time()
+
+    if client_ip not in ip_request_windows:
+        ip_request_windows[client_ip] = deque()
+    window = ip_request_windows[client_ip]
+
+    while window and now - window[0] > RATE_LIMIT_WINDOW_SECONDS:
+        window.popleft()
+
+    if len(window) >= MAX_REQUESTS_PER_WINDOW:
+        return JSONResponse(content={"error": "Rate limit exceeded", "message":f"rate limit of {MAX_REQUESTS_PER_WINDOW} requests per {RATE_LIMIT_WINDOW_SECONDS} seconds per IP has been exceeded","retry_after": int(RATE_LIMIT_WINDOW_SECONDS - (now - window[0]))}, status_code=429)
+
+    window.append(now)
+    return await call_next(request)
 DB_PATH = "fincore_ledger.db"
 
 def init_db():
