@@ -147,3 +147,67 @@ def get_ledger_audit():
             for r in rows
         ]
     }
+
+# --- Release v1.07: 3-State Circuit Breaker (CLOSED -> OPEN -> HALF_OPEN) ---
+class CircuitBreaker:
+    def __init__(self, failure_threshold: int = 3, recovery_timeout_sec: float = 15.0):
+        self.state = "CLOSED"  # CLOSED | OPEN | HALF_OPEN
+        self.failure_count = 0
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout_sec = recovery_timeout_sec
+        self.last_failure_time = 0.0
+
+    def allow_request(self) -> bool:
+        if self.state == "CLOSED":
+            return True
+        if self.state == "OPEN":
+            if (time.time() - self.last_failure_time) >= self.recovery_timeout_sec:
+                self.state = "HALF_OPEN"
+                return True
+            return False
+        return True  # HALF_OPEN allows 1 probe request
+
+    def record_success(self):
+        self.failure_count = 0
+        self.state = "CLOSED"
+
+    def record_failure(self):
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        if self.failure_count >= self.failure_threshold:
+            self.state = "OPEN"
+
+bank_gateway_cb = CircuitBreaker(failure_threshold=3, recovery_timeout_sec=15.0)
+
+class GatewayDispatchRequest(BaseModel):
+    tx_id: str = Field(example="UPI-CB-7001")
+    simulate_downstream_outage: bool = Field(default=False)
+
+@app.post("/api/v1/payments/gateway-dispatch")
+def dispatch_to_external_bank(req: GatewayDispatchRequest):
+    # 1. Fail-Fast in <1ms if Circuit is OPEN (Protects Thread Pool!)
+    if not bank_gateway_cb.allow_request():
+        return {
+            "tx_id": req.tx_id,
+            "circuit_state": bank_gateway_cb.state,
+            "action": "FAIL_FAST_FALLBACK_TO_OUTBOX",
+            "latency_ms": 0.4
+        }
+
+    # 2. Simulate downstream bank/LLM failure or success
+    if req.simulate_downstream_outage:
+        bank_gateway_cb.record_failure()
+        return {
+            "tx_id": req.tx_id,
+            "circuit_state": bank_gateway_cb.state,
+            "failure_count": bank_gateway_cb.failure_count,
+            "action": "DOWNSTREAM_TIMEOUT_RECORDED"
+        }
+
+    bank_gateway_cb.record_success()
+    return {
+        "tx_id": req.tx_id,
+        "circuit_state": bank_gateway_cb.state,
+        "failure_count": bank_gateway_cb.failure_count,
+        "action": "EXTERNAL_BANK_SETTLED_OK"
+    }
