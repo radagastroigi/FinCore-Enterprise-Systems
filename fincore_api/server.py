@@ -1,13 +1,14 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI,Request,HTTPException, Header
 from pydantic import BaseModel, Field
 import sqlite3
 import time
 import uuid
 from collections import deque
-from fastapi import Request
 from fastapi.responses import JSONResponse
-
-
+import hmac
+import hashlib
+import base64
+import json
 
 app = FastAPI(
     title="FinCore-AI Enterprise Payment & Ledger API",
@@ -211,3 +212,48 @@ def dispatch_to_external_bank(req: GatewayDispatchRequest):
         "failure_count": bank_gateway_cb.failure_count,
         "action": "EXTERNAL_BANK_SETTLED_OK"
     }
+
+JWT_SECRET = b"fincore-enterprise-hmac-secret-2026"
+
+def create_jwt(sub: str, role: str, ttl_sec: int = 900) -> str:
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "HS256","typ": "JWT"}).encode()).rstrip(b"=")
+    payload_data = {"sub": sub, "role": role, "exp": int(time.time()) + ttl_sec}
+    payload = base64.urlsafe_b64encode(json.dumps(payload_data).encode()).rstrip(b"=")
+    signing_input = header + b"." + payload
+    sig = base64.urlsafe_b64encode(hmac.new(JWT_SECRET,signing_input,hashlib.sha256).digest()).rstrip(b"=")
+    return (signing_input + b"." + sig).decode()
+
+def verify_jwt(token: str) -> dict:
+    try:
+        header_b64, payload_b64, sig_b64 = token.split(".")
+        signing_input = f"{header_b64}.{payload_b64}".encode()
+        expected_sig = base64.urlsafe_b64encode(
+            hmac.new(JWT_SECRET, signing_input, hashlib.sha256).digest()
+        ).rstrip(b"=").decode() 
+        if not hmac.compare_digest(sig_b64, expected_sig):
+            raise ValueError("Invalid signature")
+        padded = payload_b64 + "=" * (-len(payload_b64) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+        if claims["exp"] < time.time():
+            raise ValueError("Token expired")
+        return claims
+    except Exception:
+        raise HTTPException(status_code=401, detail="INVALID_OR_EXPIRED_JWT")
+
+class TokenRequest(BaseModel):
+    user_id: str = Field(example="shiva.rakesh")
+    role: str = Field(default="ADMIN_AUDITOR", example="ADMIN_AUDITOR")
+
+@app.post("/api/v1/auth/token")
+def issue_jwt_token(req: TokenRequest):
+    token = create_jwt(sub=req.user_id, role=req.role)
+    return {"access_token": token, "token_type": "Bearer", "expires_in_sec": 900}
+
+@app.get("/api/v1/ledger/secure-audit")
+def get_rbac_protected_audit(authorization: str = Header(default="")):
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="MISSING_BEARER_TOKEN")
+    claims = verify_jwt(authorization.removeprefix("Bearer ").strip())
+    if claims.get("role") != "ADMIN_AUDITOR":
+        raise HTTPException(status_code=403, detail="RBAC_FORBIDDEN_REQUIRES_ADMIN_AUDITOR")
+    return {"status": "RBAC_VERIFIED", "auditor": claims["sub"], "role": claims["role"]}

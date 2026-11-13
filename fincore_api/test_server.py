@@ -66,3 +66,16 @@ def test_circuit_breaker_trips_open_and_fails_fast():
         "simulate_downstream_outage": False
     })
     assert res_fast.json()["action"] == "FAIL_FAST_FALLBACK_TO_OUTBOX"
+
+def test_jwt_signature_and_rbac_enforcement():
+    ip_request_windows.clear()
+    # 1. Viewer role gets 403 Forbidden on Admin Audit route
+    viewer_tok = client.post("/api/v1/auth/token", json={"user_id": "guest", "role": "VIEWER"}).json()["access_token"]
+    res_forbidden = client.get("/api/v1/ledger/secure-audit", headers={"Authorization": f"Bearer {viewer_tok}"})
+    assert res_forbidden.status_code == 403
+
+    # 2. Admin Auditor role gets 200 OK
+    admin_tok = client.post("/api/v1/auth/token", json={"user_id": "shiva", "role": "ADMIN_AUDITOR"}).json()["access_token"]
+    res_ok = client.get("/api/v1/ledger/secure-audit", headers={"Authorization": f"Bearer {admin_tok}"})
+    assert res_ok.status_code == 200
+    assert res_ok.json()["status"] == "RBAC_VERIFIED"
