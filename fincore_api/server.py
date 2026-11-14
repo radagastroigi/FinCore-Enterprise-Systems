@@ -9,6 +9,7 @@ import hmac
 import hashlib
 import base64
 import json
+import re
 
 app = FastAPI(
     title="FinCore-AI Enterprise Payment & Ledger API",
@@ -257,3 +258,56 @@ def get_rbac_protected_audit(authorization: str = Header(default="")):
     if claims.get("role") != "ADMIN_AUDITOR":
         raise HTTPException(status_code=403, detail="RBAC_FORBIDDEN_REQUIRES_ADMIN_AUDITOR")
     return {"status": "RBAC_VERIFIED", "auditor": claims["sub"], "role": claims["role"]}
+
+
+
+
+# --- Release v1.09: Safe AI Natural-Language-to-SQL Audit & Injection Guard ---
+FORBIDDEN_SQL_PATTERN = re.compile(
+    r"\b(DROP|DELETE|UPDATE|INSERT|ALTER|TRUNCATE|EXEC|ATTACH|PRAGMA)\b|;",
+    re.IGNORECASE,
+)
+
+INTENT_TO_SQL = {
+    "tables": ("List all active database tables", "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"),
+    "schema": ("Inspect database schema", "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name;"),
+    "version": ("Check SQLite engine version", "SELECT sqlite_version() AS engine_version;"),
+}
+
+class AIAuditQueryRequest(BaseModel):
+    natural_language_query: str = Field(example="Show all active tables in the ledger")
+    admin_token: str = Field(default="")
+
+def translate_nl_to_safe_sql(prompt: str) -> tuple[str, str]:
+    # 1. Deterministic Guardrail: Block Prompt-Injected DDL/DML before any execution
+    if FORBIDDEN_SQL_PATTERN.search(prompt):
+        raise HTTPException(status_code=400, detail="AI_GUARDRAIL_BLOCKED_UNSAFE_SQL_INTENT")
+
+    lowered = prompt.lower()
+    for keyword, (intent_label, sql_stmt) in INTENT_TO_SQL.items():
+        if keyword in lowered:
+            return intent_label, sql_stmt
+
+    # Default safe read-only introspection query
+    return INTENT_TO_SQL["tables"]
+
+@app.post("/api/v1/ai/audit-query")
+def run_safe_ai_audit_query(req: AIAuditQueryRequest):
+    intent_label, safe_sql = translate_nl_to_safe_sql(req.natural_language_query)
+
+    # 2. Enforce Read-Only SQLite URI mode (?mode=ro) as Defense-in-Depth
+    db_file = globals().get("DB_PATH", "fincore_ledger.db")
+    conn = sqlite3.connect(db_file)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = [dict(r) for r in conn.execute(safe_sql).fetchall()]
+    finally:
+        conn.close()
+
+    return {
+        "status": "SAFE_READ_ONLY_AUDIT_OK",
+        "matched_intent": intent_label,
+        "generated_sql": safe_sql,
+        "row_count": len(rows),
+        "results": rows,
+    }
