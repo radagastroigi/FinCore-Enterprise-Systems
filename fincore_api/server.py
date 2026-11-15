@@ -10,6 +10,7 @@ import hashlib
 import base64
 import json
 import re
+import math
 
 app = FastAPI(
     title="FinCore-AI Enterprise Payment & Ledger API",
@@ -311,3 +312,61 @@ def run_safe_ai_audit_query(req: AIAuditQueryRequest):
         "row_count": len(rows),
         "results": rows,
     }
+
+# --- Release v1.10: First-Principles Hybrid RAG (Lexical + Cosine Vector Search) ---
+POLICY_CORPUS = [
+    {
+        "doc_id": "RBI-AML-2026-01",
+        "title": "RBI High-Value RTGS & AML Velocity Rules",
+        "content": "Transactions exceeding 50000 INR require KYC PAN verification and velocity rate limiting.",
+        "embedding": [0.92, 0.85, 0.15, 0.10],
+    },
+    {
+        "doc_id": "PCI-DSS-JWT-04",
+        "title": "Zero-Trust API JWT & RBAC Audit Standard",
+        "content": "All ledger audit endpoints must enforce HMAC-SHA256 JWT tokens and ADMIN_AUDITOR RBAC roles.",
+        "embedding": [0.12, 0.20, 0.95, 0.88],
+    },
+    {
+        "doc_id": "OUTBOX-RESILIENCE-09",
+        "title": "Circuit Breaker & Transactional Outbox Failover",
+        "content": "When downstream bank UPI gateways time out 3 times, trip circuit breaker OPEN and queue to outbox.",
+        "embedding": [0.45, 0.88, 0.30, 0.25],
+    },
+]
+
+def cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
+    dot = sum(a * b for a, b in zip(vec_a, vec_b))
+    norm_a = math.sqrt(sum(a * a for a in vec_a))
+    norm_b = math.sqrt(sum(b * b for b in vec_b))
+    return dot / (norm_a * norm_b) if (norm_a and norm_b) else 0.0
+
+class HybridRAGRequest(BaseModel):
+    query: str = Field(example="RBI AML velocity rules for 50000 INR")
+    query_embedding: list[float] = Field(default=[0.90, 0.82, 0.12, 0.10])
+    alpha_vector_weight: float = Field(default=0.6, ge=0.0, le=1.0)
+
+@app.post("/api/v1/ai/hybrid-rag")
+def hybrid_rag_retrieve(req: HybridRAGRequest):
+    query_tokens = set(req.query.lower().split())
+    ranked = []
+
+    for doc in POLICY_CORPUS:
+        doc_tokens = set((doc["title"] + " " + doc["content"]).lower().split())
+        lexical_score = len(query_tokens & doc_tokens) / max(len(query_tokens), 1)
+        vector_score = cosine_similarity(req.query_embedding, doc["embedding"])
+        hybrid_score = round(
+            (req.alpha_vector_weight * vector_score)
+            + ((1.0 - req.alpha_vector_weight) * lexical_score),
+            4,
+        )
+        ranked.append({
+            "doc_id": doc["doc_id"],
+            "title": doc["title"],
+            "hybrid_score": hybrid_score,
+            "vector_score": round(vector_score, 4),
+            "lexical_score": round(lexical_score, 4),
+        })
+
+    ranked.sort(key=lambda x: x["hybrid_score"], reverse=True)
+    return {"top_match": ranked[0], "ranked_Context": ranked}

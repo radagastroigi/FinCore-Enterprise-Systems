@@ -97,3 +97,12 @@ def test_ai_nl_to_sql_audit_and_injection_guard():
     })
     assert res_blocked.status_code == 400
     assert res_blocked.json()["detail"] == "AI_GUARDRAIL_BLOCKED_UNSAFE_SQL_INTENT"
+
+def test_hybrid_rag_semantic_lexical_scores():
+    res = client.post("/api/v1/ai/hybrid-rag", json = {
+        "query": "RBI AML velocity rules 50000 INR",
+        "query_embedding": [0.90, 0.82, 0.12, 0.10],
+        "alpha_vector_weight": 0.6
+    })
+    assert res.status_code == 200
+    assert res.json()["top_match"]["doc_id"] == "RBI-AML-2026-01"
