@@ -1,3 +1,5 @@
+import heapq
+from tkinter import N
 from fastapi import FastAPI,Request,HTTPException, Header
 from pydantic import BaseModel, Field
 import sqlite3
@@ -370,3 +372,77 @@ def hybrid_rag_retrieve(req: HybridRAGRequest):
 
     ranked.sort(key=lambda x: x["hybrid_score"], reverse=True)
     return {"top_match": ranked[0], "ranked_Context": ranked}
+
+
+# --- Release v1.11: Min-Heap Priority Payment Scheduler ---
+payment_min_heap: list[tuple[int, int, str, float]] = []
+heap_sequence_counter: int = 0
+
+class PriorityPaymentRequest(BaseModel):
+    tx_id: str
+    amount: float = Field(gt=0)
+    priority: int = Field(ge=1, le=3, description="1=RTGS_URGENT, 2=UPI_FAST, 3=NEFT_BATCH")
+
+
+@app.post("/api/v1/scheduler/enqueue")
+def enqueue_priority_payment(req: PriorityPaymentRequest):
+    global heap_sequence_counter
+    heap_sequence_counter += 1
+    # Push tuple: (priority, sequence_number for FIFO tie-breaker, tx_id, amount)
+    heapq.heappush(payment_min_heap, (req.priority, heap_sequence_counter, req.tx_id, req.amount))
+    return {
+        "queued": req.tx_id,
+        "queue_size": len(payment_min_heap),
+        "next_up_tx": payment_min_heap[0][2] # O(1) peek at highest priority item
+    }
+
+@app.post("/api/v1/scheduler/process-next")
+def process_next_priority_payment():
+    if not payment_min_heap:
+        raise HTTPException(status_code=404, detail="Queue is empty")
+    
+    priority, seq, tx_id, amount = heapq.heappop(payment_min_heap)
+    return {
+        "processed_tx": tx_id,
+        "priority": priority,
+        "amount": amount,
+        "remaining": len(payment_min_heap)
+    }
+
+# --- Release v1.12: IRCTC / Flash-Sale Atomic Inventory Hold & TTL Auto-Rollback ---
+FLASH_POOL = {"available_units": 2}
+active_holds: dict[str, dict] = {}
+
+class FlashReserveRequest(BaseModel):
+    user_id: str
+    ttl_seconds: float = Field(default=300.0, gt=0)
+
+def reclaim_expired_holds(now: float) -> int:
+    reclaimed = 0
+    for hold_id, item in active_holds.items():
+        if(item["status"] == "HELD" and now > item["expires_at"]) :
+            item["status"] = "EXPIRED"
+            FLASH_POOL["available_units"] += 1
+            reclaimed += 1
+    return reclaimed
+
+@app.post("/api/v1/flash-sale/reserve")
+def reserve_flash_unit(req: FlashReserveRequest):
+    now = time.time()
+    reclaim_expired_holds(now)
+    if FLASH_POOL["available_units"] <= 0:
+        return {"status": "SOLD_OUT_WAITLIST", "available_units": 0}
+    FLASH_POOL["available_units"] -= 1
+    hold_id = f"HOLD-{req.user_id}-{int(now*1000)}"
+    active_holds[hold_id]= {"user_id" :req.user_id, "status" : "HELD", "expires_at" : now+req.ttl_seconds}
+    return {"status": "RESERVED_HOLD", "hold_id": hold_id, "available_units": FLASH_POOL["available_units"]}
+
+@app.post("/api/v1/flash-sale/confirm/{hold_id}")
+def confirm_flash_unit(hold_id:str):
+    now = time.time()
+    reclaim_expired_holds(now)
+    hold = active_holds.get(hold_id)
+    if not hold or not hold["status"] == "HELD":
+        raise HTTPException(status_code = 410, detail="HOLD_TTL_EXPIRED_SEAT_RELEASED")
+    hold["status"] = "CONFIRMED"
+    return {"status" : "BOOKING_CONFIRMED", "hold_id" : hold_id}

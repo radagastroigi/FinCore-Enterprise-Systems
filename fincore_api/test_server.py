@@ -1,5 +1,6 @@
+import time
 from fastapi.testclient import TestClient
-from server import app, ip_request_windows,bank_gateway_cb
+from server import FLASH_POOL, active_holds, app, ip_request_windows,bank_gateway_cb, payment_min_heap
 import uuid
 
 client = TestClient(app)
@@ -106,3 +107,60 @@ def test_hybrid_rag_semantic_lexical_scores():
     })
     assert res.status_code == 200
     assert res.json()["top_match"]["doc_id"] == "RBI-AML-2026-01"
+
+
+def test_min_heap_priority_scheduler():
+    payment_min_heap.clear()
+    ip_request_windows.clear()
+
+    # 1. Enqueue slow batch payment first (Priority 3)
+    client.post("/api/v1/scheduler/enqueue", json={
+        "tx_id": "TX-BATCH-99",
+        "amount": 500.0,
+        "priority": 3
+    })
+
+    # 2. Enqueue urgent RTGS payment second (Priority 1)
+    client.post("/api/v1/scheduler/enqueue", json={
+        "tx_id": "TX-URGENT-01",
+        "amount": 90000.0,
+        "priority": 1
+    })
+
+    # 3. Process next must return the Priority 1 payment first!
+    res = client.post("/api/v1/scheduler/process-next")
+    assert res.status_code == 200
+    assert res.json()["processed_tx"] == "TX-URGENT-01"
+
+def test_flash_sale_atomic_hold_and_ttl_rollback():
+    FLASH_POOL["available_units"] = 1
+    active_holds.clear()
+    ip_request_windows.clear()
+
+
+    #1. User A reserves the last seat with an ultra-short TTL (0.05 seconds)
+    res_a = client.post("/api/v1/flash-sale/reserve",json ={ "user_id" : "Alice", "ttl_seconds" : 0.05})
+    assert res_a.status_code == 200
+    data_a = res_a.json()
+    assert data_a["status"] == "RESERVED_HOLD"
+    assert data_a["available_units"] == 0
+
+    # 2. User B tries immediately while Alice holds it -> should be SOLD_OUT
+    res_b_early = client.post("/api/v1/flash-sale/reserve", json={
+        "user_id": "Bob",
+        "ttl_seconds": 60.0
+    })
+    assert res_b_early.status_code == 200
+    assert res_b_early.json()["status"] == "SOLD_OUT_WAITLIST"
+
+    time.sleep(0.08)
+    # 4. User B tries again -> TTL sweep triggers, returning +1 seat, so Bob gets the hold!
+    res_b_retry = client.post("/api/v1/flash-sale/reserve", json={
+        "user_id": "Bob",
+        "ttl_seconds": 60.0
+    })
+
+    assert res_b_retry.status_code == 200
+    data_b = res_b_retry.json()
+    assert data_b["status"] == "RESERVED_HOLD"
+
