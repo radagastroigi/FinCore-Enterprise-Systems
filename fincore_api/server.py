@@ -13,6 +13,7 @@ import base64
 import json
 import re
 import math
+from itertools import count
 
 app = FastAPI(
     title="FinCore-AI Enterprise Payment & Ledger API",
@@ -446,3 +447,89 @@ def confirm_flash_unit(hold_id:str):
         raise HTTPException(status_code = 410, detail="HOLD_TTL_EXPIRED_SEAT_RELEASED")
     hold["status"] = "CONFIRMED"
     return {"status" : "BOOKING_CONFIRMED", "hold_id" : hold_id}
+
+
+class LimitOrderRequest(BaseModel):
+    symbol: str
+    side: str  # "BUY" or "SELL"
+    order_id: str
+    qty: int = Field(gt=0)
+    price: float = Field(gt=0)
+
+
+class OrderBookEngine:
+    def __init__(self):
+        self.bids: list[tuple[float, int, str, int]] = []  # (-price, seq, order_id, qty)
+        self.asks: list[tuple[float, int, str, int]] = []  # (price, seq, order_id, qty)
+        self.seq = count(1)
+
+    def place_order(self, side: str, price: float, qty: int, order_id: str) -> dict:
+        normalized_side = side.upper()
+        if normalized_side not in ("BUY", "SELL"):
+            raise HTTPException(status_code=400, detail="INVALID_SIDE")
+
+        trades = []
+        order_seq = next(self.seq)
+
+        if normalized_side == "BUY":
+            while qty > 0 and self.asks and self.asks[0][0] <= price:
+                ask_price, ask_seq, ask_id, ask_qty = heapq.heappop(self.asks)
+                fill_qty = min(qty, ask_qty)
+                trades.append({
+                    "price": ask_price,
+                    "qty": fill_qty,
+                    "buy_order_id": order_id,
+                    "sell_order_id": ask_id,
+                })
+                qty -= fill_qty
+                leftover_ask = ask_qty - fill_qty
+                if leftover_ask > 0:
+                    heapq.heappush(self.asks, (ask_price, ask_seq, ask_id, leftover_ask))
+
+            if qty > 0:
+                heapq.heappush(self.bids, (-price, order_seq, order_id, qty))
+
+        elif normalized_side == "SELL":
+            while qty > 0 and self.bids and (-self.bids[0][0]) >= price:
+                neg_bid_price, bid_seq, bid_id, bid_qty = heapq.heappop(self.bids)
+                bid_price = -neg_bid_price
+                fill_qty = min(qty, bid_qty)
+                trades.append({
+                    "price": bid_price,
+                    "qty": fill_qty,
+                    "buy_order_id": bid_id,
+                    "sell_order_id": order_id,
+                })
+                qty -= fill_qty
+                leftover_bid = bid_qty - fill_qty
+                if leftover_bid > 0:
+                    heapq.heappush(self.bids, (neg_bid_price, bid_seq, bid_id, leftover_bid))
+
+            if qty > 0:
+                heapq.heappush(self.asks, (price, order_seq, order_id, qty))
+
+        return {
+            "order_id": order_id,
+            "trades": trades,
+            "remaining_qty": qty,
+            "open_bids": len(self.bids),
+            "open_asks": len(self.asks),
+        }
+
+
+order_books: dict[str, OrderBookEngine] = {}
+
+
+@app.post("/api/v1/exchange/order")
+def submit_limit_order(req: LimitOrderRequest):
+    symbol_key = req.symbol.upper()
+    if symbol_key not in order_books:
+        order_books[symbol_key] = OrderBookEngine()
+
+    result = order_books[symbol_key].place_order(
+        side=req.side,
+        price=req.price,
+        qty=req.qty,
+        order_id=req.order_id,
+    )
+    return {"symbol": symbol_key, **result}

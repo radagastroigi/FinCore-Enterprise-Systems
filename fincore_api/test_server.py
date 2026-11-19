@@ -1,6 +1,6 @@
 import time
 from fastapi.testclient import TestClient
-from server import FLASH_POOL, active_holds, app, ip_request_windows,bank_gateway_cb, payment_min_heap
+from server import FLASH_POOL, active_holds, app, ip_request_windows,bank_gateway_cb, payment_min_heap, order_books
 import uuid
 
 client = TestClient(app)
@@ -164,3 +164,31 @@ def test_flash_sale_atomic_hold_and_ttl_rollback():
     data_b = res_b_retry.json()
     assert data_b["status"] == "RESERVED_HOLD"
 
+def test_limit_order_book_price_time_priority():
+    order_books.clear()
+
+    sell_res = client.post("/api/v1/exchange/order", json={
+        "symbol": "RELIANCE",
+        "side": "SELL",
+        "order_id": "S-1",
+        "qty": 10,
+        "price": 100.0,
+    })
+    assert sell_res.status_code == 200
+    assert sell_res.json()["trades"] == []
+    assert sell_res.json()["open_asks"] == 1
+
+    buy_res = client.post("/api/v1/exchange/order", json={
+        "symbol": "RELIANCE",
+        "side": "BUY",
+        "order_id": "B-1",
+        "qty": 4,
+        "price": 102.0,
+    })
+    assert buy_res.status_code == 200
+    body = buy_res.json()
+    assert body["trades"][0]["qty"] == 4
+    assert body["trades"][0]["price"] == 100.0
+    assert body["remaining_qty"] == 0
+    assert body["open_bids"] == 0
+    assert body["open_asks"] == 1
