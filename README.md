@@ -1,31 +1,95 @@
-# FinCore-AI: Enterprise Fintech, Quant & Agentic AI Systems Architecture
+<div align="center">
 
-**Author:** Shiva Rakesh S ([LinkedIn](https://www.linkedin.com/in/shiva-rakesh-s/))  
-**Tech Stack:** Python (`uv`, `Pydantic v2`, `FastAPI`), `.NET 8 / C#`, `LangGraph`, `Model Context Protocol (MCP)`, `Redis`, `Kafka`, `Qdrant Hybrid RAG`, `PostgreSQL / MSSQL`, `Docker`
+<img src="pictures/banner.jpg" alt="FinCore-AI Architecture Banner" width="100%" />
+
+<br />
+
+<img src="https://readme-typing-svg.demolab.com?font=Inter&weight=700&size=24&pause=1400&color=E2A37E&center=true&vCenter=true&width=640&lines=FinCore-AI+%E2%80%94+Payment+Risk+%26+Fraud+ML+Engine;Open-Source+Core+Powering+PayShield+%F0%9F%9B%A1%EF%B8%8F;15+Handcrafted+Modules+%C2%B7+Zero+Boilerplate" alt="FinCore-AI Typing SVG" />
+
+<p>
+  <a href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/🐍_Python-3.11+-161514?style=for-the-badge" alt="Python" />
+  </a>
+  <a href="https://fastapi.tiangolo.com/">
+    <img src="https://img.shields.io/badge/⚡_FastAPI-REST_API-009688?style=for-the-badge" alt="FastAPI" />
+  </a>
+  <a href="https://scikit-learn.org/">
+    <img src="https://img.shields.io/badge/🤖_scikit--learn-Fraud_ML-C87D55?style=for-the-badge" alt="scikit-learn" />
+  </a>
+  <a href="https://www.docker.com/">
+    <img src="https://img.shields.io/badge/🐳_Docker-Ready-2496ED?style=for-the-badge" alt="Docker" />
+  </a>
+</p>
+
+<p>
+  🌐 <a href="https://radagastroigi.github.io/"><strong>Portfolio</strong></a> &nbsp;·&nbsp;
+  💼 <a href="https://www.linkedin.com/in/shiva-rakesh-s/"><strong>LinkedIn</strong></a> &nbsp;·&nbsp;
+  🎬 <a href="https://www.loom.com/share/41bde33a487442dfaca639692ed312cd"><strong>60s Video Intro</strong></a> &nbsp;·&nbsp;
+  ✉️ <a href="mailto:monkthetics@gmail.com"><strong>Contact</strong></a>
+</p>
+
+</div>
 
 ---
 
-## 🏗️ Architecture Roadmap (4 Flagship System Mimics)
-1. **Term 1 (`v1_01` – `v1_25`): FinGuard Core (Mimicking Razorpay / PayPal Payment Gateway)** — Sub-15ms Payment Idempotency, Sliding-Window Velocity Limiter, ACID Double-Entry Ledger & MCP Fraud Triage.
-2. **Term 2 (`v2_01` – `v2_25`): FinRAG & Quant Engine (Mimicking Zerodha Kite Order-Book & Market RAG)** — Redis Sorted-Set Order Matching, Kafka Tick Streams, Hybrid RAG (`BM25` + `Qdrant` + `Cohere Rerank`) on SEC/SEBI Filings.
-3. **Term 3 (`v3_01` – `v3_25`): FinAgent MCP (Mimicking Amazon Flash-Sale Concurrency & Safe SQL MCP)** — Distributed Redlock, Optimistic Concurrency Control, Read-Only SQL Server MCP Gateway & Multi-Agent Reconciliation Swarm.
-4. **Term 4 (`v4_01` – `v4_25`): FinGate Cloud SaaS (Mimicking Netflix Scale API Gateway & AI Cost Optimizer)** — Multi-Tenant Reverse Proxy, Semantic Vector Caching (85% Token Savings), NeMo Guardrails & SaaS Billing.
+### ⚙️ What It Does
+
+Handcrafted from first principles to mirror production payment gateways, exchanges, and fraud engines—verified end-to-end with `pytest`.
+
+| Pillar | Built-In Capabilities |
+| :--- | :--- |
+| 🔐 **Payment Integrity** | `O(1)` idempotency cache, ACID double-entry ledger with optimistic locking, transactional outbox |
+| 🛡️ **Fraud & Risk ML** | Sliding-window velocity limiter, `scikit-learn` Gradient Boosting scorer (Precision/Recall/FPR), PSI drift alerts |
+| ⚡ **Reliability & Scale** | 3-state circuit breaker, ASGI HTTP `429` rate limiter, HMAC-SHA256 webhook dispatcher with backoff & DLQ |
+| 📊 **Matching & AI Audit** | Two-heap limit order book, atomic TTL flash-sale holds, prompt/SQL-injection firewall, Hybrid RAG reranker |
 
 ---
 
-## 🚀 Shipped Modules & Spaced-Repetition Revision Notes
+### 🚀 Quickstart
 
-### ✅ Release `v1.01` — Idempotent Payment Fraud & Risk Scoring Engine (`v1_01_idempotency_engine`)
-- **Core Concept & DSA Pattern:** `O(1)` `HashSet` lookup at the API ingestion boundary to block duplicate payment replay attacks (double-charges) in `<1ms` before invoking downstream databases or AI agents.
-- **OOP & Design Principle:** **Single Responsibility & Schema Enforcement** — Using `Pydantic BaseModel` (`PaymentFraudAssessment`) with strict `Literal` types so downstream services never receive malformed JSON.
-- **Interview Takeaway:** *Never call an LLM on every raw transaction; filter 95% of traffic with sub-millisecond deterministic rules and route only borderline high-risk anomalies (`score 45–79`) to LangGraph/MCP agents.*
+```bash
+uv sync                                                   # Install dependencies
+uv run python -m pytest -v                                # Run full test suite
+uv run python -m uvicorn fincore_api.server:app --reload  # Start API (Swagger: /docs)
+```
 
-### ✅ Release `v1.02` — Live Sliding-Window Payment Velocity Limiter (`v1_02_velocity_limiter`)
-- **Core Concept & DSA Pattern:** **Sliding Window + Double-Ended Queue (`collections.deque`)** — Evicts transactions older than `WINDOW_SECONDS` from the left (`popleft()`) in `O(1)` amortized time while tracking real-time rolling volume and frequency.
-- **System Design Equivalent:** In distributed production across multiple pods, this in-memory `deque` maps directly to a **Redis Sorted Set (`ZADD` / `ZREMRANGEBYSCORE`)** keyed by `account_id`.
-- **Interview Takeaway:** *Fixed-window counters suffer from boundary spikes (2x traffic at the minute edge); a rolling sliding window guarantees strict velocity enforcement against automated card-testing bots.*
+---
 
-### ✅ Release `v1.03` — ACID Double-Entry Ledger & Optimistic Concurrency (`v1_03_double_entry_ledger`)
-- **Core Concept & System Design Pattern:** **Double-Entry Bookkeeping & OCC** — Every money movement creates two immutable ledger records (Debit negative, Credit positive) where $\sum \text{Debit} + \sum \text{Credit} = 0.0$. Materialized balances are never directly updated without an atomic optimistic version check.
-- **Enterprise .NET / SQL Equivalent:** Maps directly to SQL Server `ROWVERSION` / EF Core `[Timestamp]` handling concurrency conflicts without blocking pessimistic locks.
-- **Interview Takeaway:** *Never use `UPDATE accounts SET balance = balance - X` without a version check. Financial integrity requires an append-only immutable ledger as the durable source of truth.*
+### 📦 Shipped Releases (`v1.01` – `v1.15`)
+
+<details open>
+<summary><strong>🔥 Latest Releases (v1.11 – v1.15)</strong></summary>
+
+| Release | Module | Core Pattern |
+| :--- | :--- | :--- |
+| `v1.15` | **Fraud ML Scorer & PSI Drift Monitor** | `scikit-learn` Gradient Boosting (Precision/Recall/FPR) + 10-bin PSI drift alerts |
+| `v1.14` | **Signed Webhook Dispatcher & DLQ** | Replay-safe HMAC-SHA256, exponential backoff (`2s → 4s → 8s`), Dead-Letter Queue |
+| `v1.13` | **Limit Order Book Matching Engine** | Two-Heap (`Max-Heap` Bids / `Min-Heap` Asks) price-time priority matching |
+| `v1.12` | **Flash-Sale Atomic Hold & TTL Rollback** | Lazy TTL reservation hold & auto-rollback (IRCTC / flash-sale pattern) |
+| `v1.11` | **Min-Heap Priority Payment Scheduler** | `heapq` deterministic `(priority, seq, tx_id, amount)` queue |
+
+</details>
+
+<details>
+<summary><strong>🧱 Core Foundation Releases (v1.01 – v1.10)</strong></summary>
+
+| Release | Module | Core Pattern |
+| :--- | :--- | :--- |
+| `v1.10` | **Zero-Dependency Hybrid RAG Reranker** | Lexical keyword overlap + cosine vector similarity reranking |
+| `v1.09` | **Safe NL-to-SQL Audit & Injection Firewall** | Pre-execution SQL & prompt-injection guard for read-only audits |
+| `v1.08` | **HMAC-SHA256 JWT & RBAC Guard** | Constant-time `hmac.compare_digest` verification |
+| `v1.07` | **3-State Circuit Breaker & Dockerfile** | `CLOSED → OPEN → HALF_OPEN` resilience guard + container build |
+| `v1.06` | **ASGI HTTP Rate Limiter Middleware** | Sliding-window HTTP `429` enforcement + `pytest` harness |
+| `v1.05` | **Unified FastAPI + SQLite Service** | Production REST API layer (`fincore_api/server.py`) |
+| `v1.04` | **Transactional Outbox Pattern** | Atomic DB + `OutboxEvent` commit preventing dual-write loss |
+| `v1.03` | **ACID Double-Entry Ledger** | Immutable Debit/Credit entries + Optimistic Concurrency Control |
+| `v1.02` | **Sliding-Window Velocity Limiter** | `O(1)` amortized `collections.deque` rolling-window guard |
+| `v1.01` | **Payment Idempotency Engine** | `O(1)` HashSet deduplication blocking duplicate charge replays |
+
+</details>
+
+---
+
+### ☁️ Next Milestone: Hosted **PayShield** Demo
+- 🌐 Deploy FastAPI API + clean merchant dashboard to a live public URL (Render / Hugging Face Spaces).
+- 🔌 Add Razorpay & Stripe webhook adapters and 1-command `docker-compose up` self-hosting.
