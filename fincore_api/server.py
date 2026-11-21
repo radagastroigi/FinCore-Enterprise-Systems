@@ -1,5 +1,4 @@
 import heapq
-from tkinter import N
 from fastapi import FastAPI,Request,HTTPException, Header
 from pydantic import BaseModel, Field
 import sqlite3
