@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="pictures/banner.jpg" alt="FinCore-AI Architecture Banner" width="100%" />
-
 <br />
 
 <img src="https://readme-typing-svg.demolab.com?font=Inter&weight=700&size=24&pause=1400&color=E2A37E&center=true&vCenter=true&width=640&lines=FinCore-AI+%E2%80%94+Payment+Risk+%26+Fraud+ML+Engine;Open-Source+Core+Powering+PayShield+%F0%9F%9B%A1%EF%B8%8F;15+Handcrafted+Modules+%C2%B7+Zero+Boilerplate" alt="FinCore-AI Typing SVG" />
