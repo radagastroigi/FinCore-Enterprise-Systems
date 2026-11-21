@@ -6,7 +6,7 @@ import sqlite3
 import time
 import uuid
 from collections import deque
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 import hmac
 import hashlib
 import base64
@@ -533,3 +533,11 @@ def submit_limit_order(req: LimitOrderRequest):
         order_id=req.order_id,
     )
     return {"symbol": symbol_key, **result}
+
+@app.get("/health")
+def health_check() -> dict:
+    return {"status": "ok","version":"v1.15","service":"payshield"}
+
+@app.get("/", include_in_schema =False)
+def root():
+    return RedirectResponse(url = "/docs")

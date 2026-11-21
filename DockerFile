@@ -4,8 +4,9 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-RUN pip install --no-cache-dir fastapi uvicorn pydantic httpx pytest
+COPY requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY fincore_api/ ./fincore_api/
 
-EXPOSE 8000
-CMD ["uvicorn", "fincore_api.server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh","-c","uvicorn fincore_api.server:app --host 0.0.0.0 --port ${PORT:-8000}"]
